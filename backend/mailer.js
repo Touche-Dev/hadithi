@@ -1,37 +1,21 @@
 // mailer.js
 const nodemailer = require("nodemailer");
 
-// Configuration du transporteur SMTP
+// Configuration spécifique et propre pour Gmail
 let transporter = null;
 
 if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-  // Si c'est Gmail, on utilise la configuration native 'gmail' (la plus stable)
-  const isGmail = (process.env.SMTP_HOST || "").includes("gmail") || (process.env.SMTP_USER || "").endsWith("@gmail.com");
+  transporter = nodemailer.createTransport({
+    service: "gmail", // ✅ Utilise automatiquement les bons réglages de Google
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS.replace(/\s+/g, ""), // Mot de passe d'application sans espaces
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+  });
 
-  const transportConfig = isGmail
-    ? {
-      service: "gmail",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS.replace(/\s+/g, ""), // Supprime les espaces éventuels du mot de passe à 16 lettres
-      },
-    }
-    : {
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 465,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    };
-
-  transporter = nodemailer.createTransport(transportConfig);
-
-  // Vérification de la connexion au démarrage
   transporter.verify((error) => {
     if (error) {
       console.error("❌ Erreur de configuration SMTP :", error.message);
