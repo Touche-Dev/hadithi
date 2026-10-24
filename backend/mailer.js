@@ -482,11 +482,140 @@ async function sendBookClubWelcomeNotification(contact, collectionName) {
   });
 }
 
-// Exports unifiés
+
+
+/**
+ * Alerte envoyée à l'administrateur lors d'une nouvelle inscription au Book Club
+ */
+async function sendBookClubAdminNotification(contact, collectionName) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
+  const subject = `[Hadithi] Nouvel inscrit au Book Club : ${contact.name}`;
+
+  const bodyContent = `
+    <p>Bonjour à l'équipe,</p>
+    <p>Un lecteur vient de rejoindre le <strong>Hadithi Book Club</strong> :</p>
+
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Nom :</strong> ${contact.name}
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E;">${contact.email}</a>
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #05182E;">
+        <strong>Collection d'intérêt :</strong> ${collectionName || "Toutes collections"}
+      </p>
+    </div>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Book Club : <strong>Nouvelle adhésion</strong>`,
+    "Notification automatique transmise par le système Hadithi Publishers."
+  );
+
+  return sendEmail({
+    toName: "Équipe Hadithi",
+    toEmail: adminEmail,
+    subject,
+    html,
+    logType: "Book Club: Notification Admin",
+  });
+}
+
+/**
+ * Accusé de réception envoyé au candidat qui postule à un atelier Academy
+ */
+async function sendAcademyApplicationNotification(contact, workshop, project) {
+  if (!contact || !contact.email) return;
+
+  const subject = `Candidature reçue : atelier « ${workshop} » — Hadithi Academy`;
+
+  const bodyContent = `
+    <p>Bonjour ${contact.name},</p>
+    <p>Nous accusons bonne réception de votre candidature pour participer à l'atelier d'écriture :</p>
+    
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 20px 0;">
+      <strong style="color: #05182E; font-size: 15px;">${workshop}</strong><br>
+      <p style="margin: 8px 0 0; color: #4B5563; font-size: 14px; font-style: italic;">
+        « ${project} »
+      </p>
+    </div>
+
+    <p>Notre équipe éditoriale examine votre proposition avec soin. Nous reviendrons vers vous très prochainement par email avec le calendrier prévisionnel des prochaines sessions et les détails pratiques.</p>
+    <p>Nous vous remercions pour votre intérêt pour Hadithi Academy.</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Hadithi Academy : <strong>Candidature reçue</strong>`,
+    "Vous recevez cet e-mail suite à votre demande d'inscription sur hadithipublishers.com."
+  );
+
+  return sendEmail({
+    toName: contact.name,
+    toEmail: contact.email,
+    subject,
+    html,
+    logType: "Academy: Accusé Candidature",
+  });
+}
+
+/**
+ * Alerte envoyée à l'administrateur lors d'une candidature Academy
+ */
+async function sendAcademyAdminNotification(contact, workshop, project) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
+  const subject = `[Hadithi Academy] Nouvelle candidature : ${contact.name} (${workshop})`;
+
+  const bodyContent = `
+    <p>Bonjour à l'équipe,</p>
+    <p>Une nouvelle candidature pour <strong>Hadithi Academy</strong> vient d'être déposée :</p>
+
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Candidat :</strong> ${contact.name}
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E;">${contact.email}</a>
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Atelier visé :</strong> ${workshop}
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #05182E;">
+        <strong>Projet :</strong><br>
+        <span style="font-style: italic; color: #374151;">${project}</span>
+      </p>
+    </div>
+
+    <p style="font-size: 13px; color: #7B8591;">Retrouvez et gérez cette demande directement dans l'espace administration.</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Hadithi Academy : <strong>Nouvelle candidature</strong>`,
+    "Notification automatique transmise par le système Hadithi Publishers."
+  );
+
+  return sendEmail({
+    toName: "Équipe Hadithi",
+    toEmail: adminEmail,
+    subject,
+    html,
+    logType: "Academy: Notification Admin",
+  });
+}
+
 module.exports = {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
   sendBookClubWelcomeNotification,
   sendNewsletterWelcomeNotification,
   sendNewsletterAdminNotification,
+  sendBookClubAdminNotification,        // <-- Nouveau
+  sendAcademyApplicationNotification,   // <-- Nouveau
+  sendAcademyAdminNotification,          // <-- Nouveau
 };

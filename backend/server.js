@@ -13,8 +13,11 @@ const {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
   sendBookClubWelcomeNotification,
-  sendNewsletterWelcomeNotification, // <-- Ajouté
-  sendNewsletterAdminNotification,   // <-- Ajouté
+  sendNewsletterWelcomeNotification,
+  sendNewsletterAdminNotification,
+  sendBookClubAdminNotification,        // <-- Ajouté
+  sendAcademyApplicationNotification,   // <-- Ajouté
+  sendAcademyAdminNotification,          // <-- Ajouté
 } = require("./mailer");
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -1073,19 +1076,18 @@ app.patch("/api/admin/registrations/:id", requireAuth, adminWrite(async (req, re
 }));
 
 
-// POST /api/book-club → Inscription au Book Club depuis le site public
+// POST /api/book-club → Inscription au Book Club avec détection de doublon
 app.post("/api/book-club", route(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || "").trim();
   const email = String(b.email || "").trim().toLowerCase();
   const collection_id = emptyToNull(b.collection_id);
 
-  if (!name) return res.status(400).json({ error: "Le nom est obligatoire." });
+  if (!name) return res.status(400).json({ error: "Le nom et prénom sont obligatoires." });
   if (!email || !emailOk(email)) return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
 
-  // 1. Transaction SQL : créer/récupérer le contact puis inscrire au Book Club
-  const { member, contact, collectionName } = await withTransaction(async (conn) => {
-    // A. Vérifier ou insérer dans la table `contacts`
+  const result = await withTransaction(async (conn) => {
+    // A. Chercher ou créer le contact
     const [ex] = await conn.query("SELECT * FROM contacts WHERE email = ?", [email]);
     let contactId;
     let contactData;
@@ -1093,45 +1095,143 @@ app.post("/api/book-club", route(async (req, res) => {
     if (ex[0]) {
       contactId = ex[0].id;
       contactData = ex[0];
-      // Si désinscrit, on le réinscrit
-      await conn.query("UPDATE contacts SET name = ?, consent_at = COALESCE(consent_at, NOW()), unsubscribed = 0 WHERE id = ?", [name, contactId]);
+
+      // B. VÉRIFICATION DE DOUBLON AU BOOK CLUB
+      const [existingMember] = await conn.query(
+        "SELECT id FROM book_club_members WHERE contact_id = ?",
+        [contactId]
+      );
+
+      if (existingMember[0]) {
+        return { isDuplicate: true };
+      }
+
+      const tags = parseJson(ex[0].tags, []);
+      if (!tags.includes("book_club")) tags.push("book_club");
+
+      await conn.query(
+        "UPDATE contacts SET name = ?, tags = ?, consent_at = COALESCE(consent_at, NOW()), unsubscribed = 0 WHERE id = ?",
+        [name, JSON.stringify(tags), contactId]
+      );
     } else {
       const [ins] = await conn.query(
         "INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) VALUES (?, ?, ?, NOW(), 0)",
-        [name, email, JSON.stringify(["lecteur"])]
+        [name, email, JSON.stringify(["lecteur", "book_club"])]
       );
       contactId = ins.insertId;
-      const [c] = await conn.query("SELECT * FROM contacts WHERE id = ?", [contactId]);
-      contactData = c[0];
+      contactData = { id: contactId, name, email };
     }
 
-    // B. Vérifier si déjà inscrit au Book Club
-    const [existingMember] = await conn.query("SELECT id FROM book_club_members WHERE contact_id = ?", [contactId]);
-    if (existingMember[0]) {
-      // Met à jour sa collection préférée s'il l'a changée
-      await conn.query("UPDATE book_club_members SET collection_id = ? WHERE id = ?", [collection_id, existingMember[0].id]);
-    } else {
-      await conn.query("INSERT INTO book_club_members (contact_id, collection_id) VALUES (?, ?)", [contactId, collection_id]);
-    }
+    // Inscription dans la table du Book Club
+    await conn.query(
+      "INSERT INTO book_club_members (contact_id, collection_id) VALUES (?, ?)",
+      [contactId, collection_id]
+    );
 
-    // C. Récupérer le nom de la collection
+    // Récupérer le libellé de la collection
     let colName = "Toutes collections";
     if (collection_id) {
       const [cols] = await conn.query("SELECT name FROM collections WHERE id = ?", [collection_id]);
       if (cols[0]) colName = cols[0].name;
     }
 
-    return { contact: contactData, collectionName: colName };
+    return { contact: contactData, collectionName: colName, isDuplicate: false };
   });
 
-  // 2. ENVOI AUTOMATIQUE DE L'EMAIL DE BIENVENUE
-  if (contact && contact.email) {
-    sendBookClubWelcomeNotification(contact, collectionName).catch((err) =>
-      console.error("Erreur lors de l'envoi de l'email Book Club :", err)
-    );
+  if (result.isDuplicate) {
+    return res.status(409).json({ error: "Cette adresse email est déjà inscrite au Hadithi Book Club." });
   }
 
-  res.status(201).json({ ok: true, message: "Bienvenue au Book Club !" });
+  // Envoi des emails (lecteur + admin)
+  sendBookClubWelcomeNotification(result.contact, result.collectionName).catch((err) =>
+    console.error("Erreur email bienvenue Book Club :", err.message)
+  );
+
+  sendBookClubAdminNotification(result.contact, result.collectionName).catch((err) =>
+    console.error("Erreur notification admin Book Club :", err.message)
+  );
+
+  res.status(201).json({ ok: true, message: "Bienvenue au Book Club Hadithi !" });
+}));
+
+
+// POST /api/academy → Candidature à un atelier Academy avec détection de doublon
+app.post("/api/academy", route(async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  const email = String(b.email || "").trim().toLowerCase();
+  const workshop = String(b.workshop || "").trim();
+  const project = String(b.project || "").trim();
+
+  if (!name) return res.status(400).json({ error: "Le nom et prénom sont obligatoires." });
+  if (!email || !emailOk(email)) return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
+  if (!workshop) return res.status(400).json({ error: "Veuillez choisir un atelier." });
+  if (!project) return res.status(400).json({ error: "Veuillez décrire brièvement votre projet." });
+
+  const result = await withTransaction(async (conn) => {
+    // A. Chercher ou créer le contact
+    const [ex] = await conn.query("SELECT id, tags FROM contacts WHERE email = ?", [email]);
+    let contactId;
+    let contactData;
+
+    if (ex[0]) {
+      contactId = ex[0].id;
+      contactData = ex[0];
+
+      // B. VÉRIFICATION DE DOUBLON ACADEMY : candidature non refusée déjà en cours pour le même atelier
+      const [existingReq] = await conn.query(
+        "SELECT id FROM academy_requests WHERE contact_id = ? AND workshop = ? AND status != 'refusee'",
+        [contactId, workshop]
+      );
+
+      if (existingReq[0]) {
+        return { isDuplicate: true };
+      }
+
+      const tags = parseJson(ex[0].tags, []);
+      if (!tags.includes("academy")) tags.push("academy");
+
+      await conn.query(
+        "UPDATE contacts SET name = ?, tags = ?, consent_at = COALESCE(consent_at, NOW()) WHERE id = ?",
+        [name, JSON.stringify(tags), contactId]
+      );
+    } else {
+      const [ins] = await conn.query(
+        "INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) VALUES (?, ?, ?, NOW(), 0)",
+        [name, email, JSON.stringify(["academy"])]
+      );
+      contactId = ins.insertId;
+      contactData = { id: contactId, name, email };
+    }
+
+    // Inscription dans la table academy_requests
+    await conn.query(
+      "INSERT INTO academy_requests (contact_id, workshop, project, status) VALUES (?, ?, ?, 'nouvelle')",
+      [contactId, workshop, project]
+    );
+
+    return { contact: contactData, workshop, project, isDuplicate: false };
+  });
+
+  if (result.isDuplicate) {
+    return res.status(409).json({
+      error: "Une candidature pour cet atelier est déjà en cours de traitement pour cette adresse email.",
+    });
+  }
+
+  // Envoi des emails (candidat + admin)
+  sendAcademyApplicationNotification(result.contact, result.workshop, result.project).catch((err) =>
+    console.error("Erreur accusé candidature Academy :", err.message)
+  );
+
+  sendAcademyAdminNotification(result.contact, result.workshop, result.project).catch((err) =>
+    console.error("Erreur notification admin Academy :", err.message)
+  );
+
+  res.status(201).json({
+    ok: true,
+    message: "Votre candidature à l'atelier a bien été prise en compte.",
+  });
 }));
 
 /* =====================================================================
