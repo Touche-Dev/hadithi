@@ -1250,6 +1250,48 @@ app.delete("/api/admin/events/:id", requireAuth, adminWrite(async (req, res) => 
   res.json({ ok: true });
 }));
 
+
+
+// POST /api/newsletter → Inscription à la newsletter depuis la page d'accueil
+app.post("/api/newsletter", route(async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  const email = String(b.email || "").trim().toLowerCase();
+
+  if (!name) {
+    return res.status(400).json({ error: "Le nom et prénom sont obligatoires." });
+  }
+  if (!email || !emailOk(email)) {
+    return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
+  }
+
+  await withTransaction(async (conn) => {
+    const [existing] = await conn.query("SELECT id, tags FROM contacts WHERE email = ?", [email]);
+
+    if (existing[0]) {
+      const currentTags = parseJson(existing[0].tags, []);
+      if (!currentTags.includes("newsletter")) {
+        currentTags.push("newsletter");
+      }
+
+      await conn.query(
+        `UPDATE contacts 
+         SET name = ?, tags = ?, unsubscribed = 0, consent_at = COALESCE(consent_at, NOW()) 
+         WHERE id = ?`,
+        [name, JSON.stringify(currentTags), existing[0].id]
+      );
+    } else {
+      await conn.query(
+        `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
+         VALUES (?, ?, ?, NOW(), 0)`,
+        [name, email, JSON.stringify(["newsletter"])]
+      );
+    }
+  });
+
+  res.status(201).json({ ok: true, message: "Merci ! Votre inscription à la newsletter a bien été prise en compte." });
+}));
+
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));

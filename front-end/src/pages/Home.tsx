@@ -48,6 +48,9 @@ function NewsletterCTA() {
     nom: "",
     email: "",
   });
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,19 +65,55 @@ function NewsletterCTA() {
 
   const handleChange =
     (field: keyof typeof form) =>
-      (e: React.ChangeEvent<HTMLInputElement>) =>
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        setErrorMsg(null);
         setForm((prev) => ({ ...prev, [field]: e.target.value }));
+      };
 
-  /* const handleSubmit = (e: React.FormEvent) => {
-     e.preventDefault();
-     // TODO: brancher sur votre endpoint d'inscription newsletter
-     console.log("Inscription newsletter :", form);
-     setIsOpen(false);
-   };*/
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setLoading(true);
+
+    // URL du serveur (ajustez le port si nécessaire, ex: 3006)
+    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3006";
+
+    try {
+      const res = await fetch(`${API_URL}/api/newsletter`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: form.nom,
+          email: form.email,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Une erreur est survenue lors de l'inscription.");
+      }
+
+      setSuccessMsg(data.message);
+      setForm({ nom: "", email: "" });
+
+      // Fermeture automatique de la modale après 2,5 secondes
+      setTimeout(() => {
+        setIsOpen(false);
+        setSuccessMsg(null);
+      }, 2500);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Impossible de contacter le serveur.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <>
-      {/* CTA : Comment nous choisissons un livre */}
+      {/* CTA : Bannière */}
       <section className="py-24">
         <div className="container-editorial">
           <Reveal>
@@ -93,14 +132,18 @@ function NewsletterCTA() {
                 <h2 className="text-[45px] font-bold text-white">
                   Ne manquez aucun récit
                 </h2>
-                <p className="mx-auto mt-4 mb-10 max-w-[95%] xl:max-w-[80%]  text-[18px] leading-[28px] text-white">
+                <p className="mx-auto mt-4 mb-10 max-w-[95%] xl:max-w-[80%] text-[18px] leading-[28px] text-white">
                   Recevez nos parutions, les coulisses d'un manuscrit du premier comité de
                   lecture jusqu'à la couverture finale, et nos rencontres d'auteurs en marge
                   des événements. Une à deux fois par mois.
                 </p>
                 <div className="mt-6">
                   <button
-                    onClick={() => setIsOpen(true)}
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                      setIsOpen(true);
+                    }}
                     className={buttonStyles.ghostOnNavy}
                   >
                     S'abonner
@@ -125,60 +168,74 @@ function NewsletterCTA() {
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Fermer"
-              className="absolute right-6 top-6 text-neutral-400 transition-colors hover:text-neutral-700"
+              className="absolute right-6 top-6 text-neutral-400 transition-colors hover:text-neutral-700 cursor-pointer"
             >
               <X size={20} />
             </button>
 
-            <h3 className="pr-8 text-[22px] font-semibold leading-snug font-heading-ariata text-navy ">
+            <h3 className="pr-8 text-[22px] font-semibold leading-snug font-heading-ariata text-navy">
               Ne manquez aucune actualité de Hadithi Publishers !
             </h3>
 
-            <form /*onSubmit={handleSubmit}*/ className="mt-8 space-y-6">
-              <div>
-                <label
-                  htmlFor="nom"
-                  className="block text-[15px] font-semibold text-neutral-900"
-                >
-                  Nom et prénoms
-                </label>
-                <input
-                  id="nom"
-                  type="text"
-                  required
-                  value={form.nom}
-                  onChange={handleChange("nom")}
-                  placeholder="Entrer votre nom et prénoms"
-                  className="mt-2 w-full border-0 border-b border-neutral-300 bg-transparent pb-2 text-[15px] text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-0"
-                />
+            {/* Message de succès */}
+            {successMsg ? (
+              <div className="mt-6 rounded border border-green-600/30 bg-green-50 p-4 text-green-800 text-[15px]">
+                {successMsg}
               </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+                {/* Message d'erreur */}
+                {errorMsg && (
+                  <p className="text-sm font-semibold text-red-600">
+                    {errorMsg}
+                  </p>
+                )}
 
+                <div>
+                  <label
+                    htmlFor="nom"
+                    className="block text-[15px] font-semibold text-neutral-900"
+                  >
+                    Nom et prénoms
+                  </label>
+                  <input
+                    id="nom"
+                    type="text"
+                    required
+                    value={form.nom}
+                    onChange={handleChange("nom")}
+                    placeholder="Entrer votre nom et prénoms"
+                    className="mt-2 w-full border-0 border-b border-neutral-300 bg-transparent pb-2 text-[15px] text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-0"
+                  />
+                </div>
 
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-[15px] font-semibold text-neutral-900"
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-[15px] font-semibold text-neutral-900"
+                  >
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={handleChange("email")}
+                    placeholder="Entrer votre adresse email"
+                    className="mt-2 w-full border-0 border-b border-neutral-300 bg-transparent pb-2 text-[15px] text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-0"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`mt-2 ${buttonStyles.solid}`}
                 >
-                  Email
-                </label>
-                <input
-                  id="email"
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={handleChange("email")}
-                  placeholder="Entrer votre adresse email"
-                  className="mt-2 w-full border-0 border-b border-neutral-300 bg-transparent pb-2 text-[15px] text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-900 focus:outline-none focus:ring-0"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className={`mt-2 ${buttonStyles.solid}`}
-              >
-                S'abonner
-              </button>
-            </form>
+                  {loading ? "Inscription en cours..." : "S'abonner"}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
