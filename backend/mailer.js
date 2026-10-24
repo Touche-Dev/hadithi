@@ -163,11 +163,11 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
 async function sendNewsletterWelcomeNotification(contact) {
   if (!contact || !contact.email) return;
 
-  const subject = "Bienvenue dans le cercle de nos lecteurs — Hadithi Publishers";
+  const subject = "Confirmation de votre inscription à la newsletter — Hadithi Publishers";
 
   const bodyContent = `
     <p>Bonjour ${contact.name},</p>
-    <p>Nous vous remercions chaleureusement pour votre inscription à la lettre d'information de <strong>Hadithi Publishers</strong>.</p>
+    <p>Nous vous remercions chaleureusement pour votre inscription à la <strong>newsletter de Hadithi Publishers</strong>.</p>
     
     <p>Une à deux fois par mois, nous partagerons avec vous :</p>
     
@@ -179,14 +179,14 @@ async function sendNewsletterWelcomeNotification(contact) {
       </ul>
     </div>
 
-    <p>Nous nous attachons à publier des récits exigeants et singuliers. Nous sommes très heureux de vous compter parmi nos lecteurs attentifs.</p>
+    <p>Nous nous attachons à publier des récits exigeants et singuliers. Nous sommes très heureux de vous compter parmi les abonnés à notre newsletter.</p>
   `;
 
   const html = emailLayout(
     subject,
     bodyContent,
-    `Lettre d'information : <strong>Hadithi</strong>`,
-    "Vous recevez cet e-mail car vous vous êtes inscrit à la lettre d'information sur hadithipublishers.com."
+    `Newsletter : <strong>Hadithi Publishers</strong>`,
+    "Vous recevez cet e-mail suite à votre inscription à la newsletter sur hadithipublishers.com."
   );
 
   return sendEmail({
@@ -215,7 +215,7 @@ async function sendNewsletterAdminNotification(contact) {
 
   const bodyContent = `
     <p>Bonjour à l'équipe,</p>
-    <p>Un nouveau lecteur vient de s'inscrire à la lettre d'information depuis le site :</p>
+    <p>Un nouveau lecteur vient de <strong>s'inscrire à la newsletter</strong> depuis le site :</p>
 
     <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
@@ -229,14 +229,14 @@ async function sendNewsletterAdminNotification(contact) {
       </p>
     </div>
 
-    <p style="font-size: 13px; color: #7B8591;">Le contact a été automatiquement enregistré dans votre base de données avec le tag « newsletter ».</p>
+    <p style="font-size: 13px; color: #7B8591;">L'abonné a été enregistré dans votre base de données avec le tag « newsletter ».</p>
   `;
 
   const html = emailLayout(
     subject,
     bodyContent,
-    `Administration : <strong>Nouveau contact</strong>`,
-    "Notification automatique transmise par le système Hadithi Publishers."
+    `Newsletter : <strong>Nouvelle inscription</strong>`,
+    "Notification automatique suite à une inscription à la newsletter Hadithi Publishers."
   );
 
   return sendEmail({
