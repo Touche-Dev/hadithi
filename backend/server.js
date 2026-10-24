@@ -4,20 +4,17 @@ const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
-/*const multer = require("multer");
-const crypto = require("crypto");
-const path = require("path");
-const fs = require("fs");*/
 require("dotenv").config();
+
 const {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
   sendBookClubWelcomeNotification,
+  sendBookClubAdminNotification,
+  sendAcademyApplicationNotification,
+  sendAcademyAdminNotification,
   sendNewsletterWelcomeNotification,
   sendNewsletterAdminNotification,
-  sendBookClubAdminNotification,        // <-- Ajouté
-  sendAcademyApplicationNotification,   // <-- Ajouté
-  sendAcademyAdminNotification,          // <-- Ajouté
 } = require("./mailer");
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -52,7 +49,7 @@ db.getConnection()
   .catch((err) => console.error("Erreur de connexion :", err.message));
 
 /* =====================================================================
- *  OUTILS & WRAPPERS GLOBAUX (Placés en haut pour être disponibles partout)
+ *  OUTILS & WRAPPERS GLOBAUX
  * ===================================================================== */
 
 const route = (fn) => (req, res) =>
@@ -198,9 +195,6 @@ app.use((req, res, next) => {
   else res.set("Cache-Control", "public, max-age=60");
   next();
 });
-
-// Couvertures et extraits PDF
-//app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 /* =====================================================================
  *  API PUBLIQUE
@@ -487,7 +481,6 @@ app.get("/api/admin/authors", requireAuth, adminRoute(async (req, res) => {
   })));
 }));
 
-
 app.post("/api/admin/authors", requireAuth, adminWrite(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || "").trim();
@@ -566,7 +559,6 @@ app.delete("/api/admin/authors/:slug", requireAuth, adminWrite(async (req, res) 
   res.json({ ok: true });
 }));
 
-// GET /api/admin/books → renvoie tous les livres complets (couvertures, prix, etc.)
 app.get("/api/admin/books", requireAuth, adminRoute(async (req, res) => {
   const [rows] = await db.query("SELECT * FROM books ORDER BY created_at DESC");
   res.json(rows.map((b) => ({
@@ -581,7 +573,6 @@ app.get("/api/admin/books", requireAuth, adminRoute(async (req, res) => {
  *  ADMIN — ROUTES EN ÉCRITURE
  * ===================================================================== */
 
-// PATCH /api/admin/books/:slug → Modifier toutes les informations d'un livre
 app.patch("/api/admin/books/:slug", requireAuth, adminWrite(async (req, res) => {
   const slug = req.params.slug;
   const b = req.body || {};
@@ -635,7 +626,6 @@ app.patch("/api/admin/books/:slug", requireAuth, adminWrite(async (req, res) => 
   res.json({ ...rows[0], id: rows[0].slug, author_id: rows[0].author_slug, published: rows[0].is_published });
 }));
 
-// DELETE /api/admin/books/:slug → Supprimer un livre du catalogue
 app.delete("/api/admin/books/:slug", requireAuth, adminWrite(async (req, res) => {
   const slug = req.params.slug;
   const [r] = await db.query("DELETE FROM books WHERE slug = ?", [slug]);
@@ -643,7 +633,6 @@ app.delete("/api/admin/books/:slug", requireAuth, adminWrite(async (req, res) =>
   res.json({ ok: true });
 }));
 
-// PATCH /api/admin/contacts/:id
 app.patch("/api/admin/contacts/:id", requireAuth, adminWrite(async (req, res) => {
   const id = Number(req.params.id);
   if (!isId(id)) throw httpError(400, "Identifiant invalide.");
@@ -683,7 +672,6 @@ app.patch("/api/admin/contacts/:id", requireAuth, adminWrite(async (req, res) =>
   res.json(contact);
 }));
 
-// POST /api/admin/contacts/merge
 app.post("/api/admin/contacts/merge", requireAuth, adminWrite(async (req, res) => {
   const keepId = Number(req.body?.keepId);
   const removeId = Number(req.body?.removeId);
@@ -735,7 +723,6 @@ app.post("/api/admin/contacts/merge", requireAuth, adminWrite(async (req, res) =
   res.json(merged);
 }));
 
-// POST /api/admin/manuscripts
 app.post("/api/admin/manuscripts", requireAuth, adminWrite(async (req, res) => {
   const b = req.body || {};
   const title = String(b.title || "").trim();
@@ -774,7 +761,6 @@ app.post("/api/admin/manuscripts", requireAuth, adminWrite(async (req, res) => {
       }
     }
 
-    // Vérification des doublons
     const [existing] = await conn.query(
       `SELECT id, title, status, received_at 
        FROM manuscripts 
@@ -813,7 +799,6 @@ app.post("/api/admin/manuscripts", requireAuth, adminWrite(async (req, res) => {
   res.status(201).json(created);
 }));
 
-// PATCH /api/admin/manuscripts/:id/status
 app.patch("/api/admin/manuscripts/:id/status", requireAuth, adminWrite(async (req, res) => {
   const id = Number(req.params.id);
   const status = String(req.body?.status || "");
@@ -845,7 +830,6 @@ app.patch("/api/admin/manuscripts/:id/status", requireAuth, adminWrite(async (re
   res.json(updated);
 }));
 
-// PATCH /api/admin/manuscripts/:id
 app.patch("/api/admin/manuscripts/:id", requireAuth, adminWrite(async (req, res) => {
   const id = Number(req.params.id);
   if (!isId(id)) throw httpError(400, "Identifiant invalide.");
@@ -881,7 +865,6 @@ app.patch("/api/admin/manuscripts/:id", requireAuth, adminWrite(async (req, res)
   res.json(m);
 }));
 
-// POST /api/admin/manuscripts/:id/convert-to-book
 app.post("/api/admin/manuscripts/:id/convert-to-book", requireAuth, adminWrite(async (req, res) => {
   const manuscriptId = Number(req.params.id);
   if (!isId(manuscriptId)) throw httpError(400, "Identifiant de manuscrit invalide.");
@@ -914,7 +897,6 @@ app.post("/api/admin/manuscripts/:id/convert-to-book", requireAuth, adminWrite(a
         [authorSlug, contact.name, "Auteur", manuscript.author_bio || null]
       );
     }
-
 
     let bookSlug = slugify(manuscript.title);
     const [existingBook] = await conn.query(
@@ -956,64 +938,7 @@ app.post("/api/admin/manuscripts/:id/convert-to-book", requireAuth, adminWrite(a
 }));
 
 /* =====================================================================
- *  TÉLÉVERSEMENT
- * ===================================================================== */
-
-/*const DOC_EXT = [".pdf", ".doc", ".docx"];
-const IMG_EXT = [".jpg", ".jpeg", ".png", ".webp"];
-const MAX_DOC = 10 * 1024 * 1024;
-const MAX_IMG = 5 * 1024 * 1024;
-
-const uploader = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => {
-      const ext = path.extname(file.originalname).toLowerCase();
-      const dir = path.join(__dirname, "uploads", IMG_EXT.includes(ext) ? "images" : "manuscripts");
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (req, file, cb) =>
-      cb(null, crypto.randomBytes(16).toString("hex") + path.extname(file.originalname).toLowerCase()),
-  }),
-  limits: { fileSize: MAX_DOC, files: 1 },
-  fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(DOC_EXT.includes(ext) || IMG_EXT.includes(ext) ? null : new Error("BAD_TYPE"), true);
-  },
-});
-
-app.post("/api/admin/uploads", requireAuth, (req, res) => {
-  uploader.single("file")(req, res, (err) => {
-    if (err) {
-      const message =
-        err.code === "LIMIT_FILE_SIZE"
-          ? "Fichier trop volumineux (10 Mo maximum)."
-          : err.message === "BAD_TYPE"
-            ? "Format non accepté (PDF, DOC, DOCX, JPG, PNG ou WEBP)."
-            : "Téléversement impossible.";
-      return res.status(400).json({ message });
-    }
-    if (!req.file) return res.status(400).json({ message: "Aucun fichier reçu." });
-
-    const ext = path.extname(req.file.filename).toLowerCase();
-    const isImage = IMG_EXT.includes(ext);
-    if (isImage && req.file.size > MAX_IMG) {
-      fs.unlink(req.file.path, () => { });
-      return res.status(400).json({ message: "Image trop volumineuse (5 Mo maximum)." });
-    }
-
-    const base = (process.env.PUBLIC_API_URL || `${req.protocol}://${req.get("host")}`).replace(/\/$/, "");
-    const folder = isImage ? "images" : "manuscripts";
-    res.status(201).json({
-      url: `${base}/uploads/${folder}/${req.file.filename}`,
-      name: req.file.originalname,
-      size: req.file.size,
-    });
-  });
-});*/
-
-/* =====================================================================
- *  BOOK CLUB / ACADEMY / INSCRIPTIONS
+ *  BOOK CLUB / ACADEMY / INSCRIPTIONS PUBLIQUES
  * ===================================================================== */
 
 app.delete("/api/admin/book-club/:id", requireAuth, adminWrite(async (req, res) => {
@@ -1039,8 +964,7 @@ app.patch("/api/admin/academy/:id", requireAuth, adminWrite(async (req, res) => 
 
   const updatedRequest = rows[0];
 
-  // RÉCUPÉRATION DU CONTACT ET ENVOI DE L'EMAIL AUTOMATIQUE
-  const [contactRows] = await db.query("SELECT * FROM contacts WHERE id = ?", [updatedRequest.contact_id]);
+  const [contactRows] = await conn.query("SELECT * FROM contacts WHERE id = ?", [updatedRequest.contact_id]);
   const contact = contactRows[0];
 
   if (contact && contact.email && ["contactee", "inscrit", "refusee"].includes(status)) {
@@ -1052,7 +976,6 @@ app.patch("/api/admin/academy/:id", requireAuth, adminWrite(async (req, res) => 
   res.json({ ...updatedRequest, created_at: iso(updatedRequest.created_at) });
 }));
 
-// DELETE /api/admin/academy/:id → Supprimer une candidature Academy
 app.delete("/api/admin/academy/:id", requireAuth, adminWrite(async (req, res) => {
   const id = Number(req.params.id);
   if (!isId(id)) throw httpError(400, "Identifiant invalide.");
@@ -1075,7 +998,6 @@ app.patch("/api/admin/registrations/:id", requireAuth, adminWrite(async (req, re
   res.json({ ...rows[0], created_at: iso(rows[0].created_at) });
 }));
 
-
 // POST /api/book-club → Inscription au Book Club avec détection de doublon
 app.post("/api/book-club", route(async (req, res) => {
   const b = req.body || {};
@@ -1087,7 +1009,6 @@ app.post("/api/book-club", route(async (req, res) => {
   if (!email || !emailOk(email)) return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
 
   const result = await withTransaction(async (conn) => {
-    // A. Chercher ou créer le contact
     const [ex] = await conn.query("SELECT * FROM contacts WHERE email = ?", [email]);
     let contactId;
     let contactData;
@@ -1096,7 +1017,6 @@ app.post("/api/book-club", route(async (req, res) => {
       contactId = ex[0].id;
       contactData = ex[0];
 
-      // B. VÉRIFICATION DE DOUBLON AU BOOK CLUB
       const [existingMember] = await conn.query(
         "SELECT id FROM book_club_members WHERE contact_id = ?",
         [contactId]
@@ -1122,13 +1042,11 @@ app.post("/api/book-club", route(async (req, res) => {
       contactData = { id: contactId, name, email };
     }
 
-    // Inscription dans la table du Book Club
     await conn.query(
       "INSERT INTO book_club_members (contact_id, collection_id) VALUES (?, ?)",
       [contactId, collection_id]
     );
 
-    // Récupérer le libellé de la collection
     let colName = "Toutes collections";
     if (collection_id) {
       const [cols] = await conn.query("SELECT name FROM collections WHERE id = ?", [collection_id]);
@@ -1142,18 +1060,19 @@ app.post("/api/book-club", route(async (req, res) => {
     return res.status(409).json({ error: "Cette adresse email est déjà inscrite au Hadithi Book Club." });
   }
 
-  // Envoi des emails (lecteur + admin)
-  sendBookClubWelcomeNotification(result.contact, result.collectionName).catch((err) =>
-    console.error("Erreur email bienvenue Book Club :", err.message)
-  );
-
-  sendBookClubAdminNotification(result.contact, result.collectionName).catch((err) =>
-    console.error("Erreur notification admin Book Club :", err.message)
-  );
+  // Envoi séquentiel des e-mails
+  (async () => {
+    try {
+      await sendBookClubWelcomeNotification(result.contact, result.collectionName);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sendBookClubAdminNotification(result.contact, result.collectionName);
+    } catch (err) {
+      console.error("Erreur lors de la chaîne d'envoi Book Club :", err.message);
+    }
+  })();
 
   res.status(201).json({ ok: true, message: "Bienvenue au Book Club Hadithi !" });
 }));
-
 
 // POST /api/academy → Candidature à un atelier Academy avec détection de doublon
 app.post("/api/academy", route(async (req, res) => {
@@ -1169,7 +1088,6 @@ app.post("/api/academy", route(async (req, res) => {
   if (!project) return res.status(400).json({ error: "Veuillez décrire brièvement votre projet." });
 
   const result = await withTransaction(async (conn) => {
-    // A. Chercher ou créer le contact
     const [ex] = await conn.query("SELECT id, tags FROM contacts WHERE email = ?", [email]);
     let contactId;
     let contactData;
@@ -1178,7 +1096,6 @@ app.post("/api/academy", route(async (req, res) => {
       contactId = ex[0].id;
       contactData = ex[0];
 
-      // B. VÉRIFICATION DE DOUBLON ACADEMY : candidature non refusée déjà en cours pour le même atelier
       const [existingReq] = await conn.query(
         "SELECT id FROM academy_requests WHERE contact_id = ? AND workshop = ? AND status != 'refusee'",
         [contactId, workshop]
@@ -1204,7 +1121,6 @@ app.post("/api/academy", route(async (req, res) => {
       contactData = { id: contactId, name, email };
     }
 
-    // Inscription dans la table academy_requests
     await conn.query(
       "INSERT INTO academy_requests (contact_id, workshop, project, status) VALUES (?, ?, ?, 'nouvelle')",
       [contactId, workshop, project]
@@ -1219,18 +1135,82 @@ app.post("/api/academy", route(async (req, res) => {
     });
   }
 
-  // Envoi des emails (candidat + admin)
-  sendAcademyApplicationNotification(result.contact, result.workshop, result.project).catch((err) =>
-    console.error("Erreur accusé candidature Academy :", err.message)
-  );
-
-  sendAcademyAdminNotification(result.contact, result.workshop, result.project).catch((err) =>
-    console.error("Erreur notification admin Academy :", err.message)
-  );
+  // Envoi séquentiel des e-mails
+  (async () => {
+    try {
+      await sendAcademyApplicationNotification(result.contact, result.workshop, result.project);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sendAcademyAdminNotification(result.contact, result.workshop, result.project);
+    } catch (err) {
+      console.error("Erreur lors de la chaîne d'envoi Academy :", err.message);
+    }
+  })();
 
   res.status(201).json({
     ok: true,
     message: "Votre candidature à l'atelier a bien été prise en compte.",
+  });
+}));
+
+// POST /api/newsletter → Inscription à la newsletter avec détection de doublon
+app.post("/api/newsletter", route(async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  const email = String(b.email || "").trim().toLowerCase();
+
+  if (!name) {
+    return res.status(400).json({ error: "Le nom et prénom sont obligatoires." });
+  }
+  if (!email || !emailOk(email)) {
+    return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
+  }
+
+  const [existing] = await db.query(
+    "SELECT id, tags, unsubscribed FROM contacts WHERE email = ?",
+    [email]
+  );
+
+  if (existing[0]) {
+    const contact = existing[0];
+    const tags = parseJson(contact.tags, []);
+
+    if (tags.includes("newsletter") && !contact.unsubscribed) {
+      return res.status(409).json({
+        error: "Cette adresse email est déjà inscrite à notre lettre d'information.",
+      });
+    }
+
+    const updatedTags = Array.from(new Set([...tags, "newsletter"]));
+    await db.query(
+      `UPDATE contacts 
+       SET name = ?, tags = ?, unsubscribed = 0, consent_at = COALESCE(consent_at, NOW()) 
+       WHERE id = ?`,
+      [name, JSON.stringify(updatedTags), contact.id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
+       VALUES (?, ?, ?, NOW(), 0)`,
+      [name, email, JSON.stringify(["newsletter"])]
+    );
+  }
+
+  // Envoi séquentiel des e-mails (Lecteur d'abord, puis Admin après 1.5s)
+  const contactData = { name, email };
+
+  (async () => {
+    try {
+      await sendNewsletterWelcomeNotification(contactData);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sendNewsletterAdminNotification(contactData);
+    } catch (err) {
+      console.error("Erreur lors de la chaîne d'envoi newsletter :", err.message);
+    }
+  })();
+
+  return res.status(201).json({
+    ok: true,
+    message: "Votre inscription à la lettre Hadithi a bien été enregistrée.",
   });
 }));
 
@@ -1350,69 +1330,6 @@ app.delete("/api/admin/events/:id", requireAuth, adminWrite(async (req, res) => 
   const [r] = await db.query("DELETE FROM events WHERE id = ?", [id]);
   if (!r.affectedRows) throw httpError(404, "Événement introuvable.");
   res.json({ ok: true });
-}));
-
-
-
-// POST /api/newsletter → Inscription à la newsletter
-app.post("/api/newsletter", route(async (req, res) => {
-  const b = req.body || {};
-  const name = String(b.name || "").trim();
-  const email = String(b.email || "").trim().toLowerCase();
-
-  if (!name) {
-    return res.status(400).json({ error: "Le nom et prénom sont obligatoires." });
-  }
-  if (!email || !emailOk(email)) {
-    return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
-  }
-
-  // 1. Vérification des doublons
-  const [existing] = await db.query(
-    "SELECT id, tags, unsubscribed FROM contacts WHERE email = ?",
-    [email]
-  );
-
-  if (existing[0]) {
-    const contact = existing[0];
-    const tags = parseJson(contact.tags, []);
-
-    if (tags.includes("newsletter") && !contact.unsubscribed) {
-      return res.status(409).json({
-        error: "Cette adresse email est déjà inscrite à notre lettre d'information.",
-      });
-    }
-
-    const updatedTags = Array.from(new Set([...tags, "newsletter"]));
-    await db.query(
-      `UPDATE contacts 
-       SET name = ?, tags = ?, unsubscribed = 0, consent_at = COALESCE(consent_at, NOW()) 
-       WHERE id = ?`,
-      [name, JSON.stringify(updatedTags), contact.id]
-    );
-  } else {
-    await db.query(
-      `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
-       VALUES (?, ?, ?, NOW(), 0)`,
-      [name, email, JSON.stringify(["newsletter"])]
-    );
-  }
-
-  // 2. ENVOI DES NOTIFICATIONS (Lecteur & Administrateur)
-  const contactData = { name, email };
-
-  sendNewsletterWelcomeNotification(contactData).catch((err) =>
-    console.error("Erreur envoi email bienvenue newsletter :", err.message)
-  );
-
-  sendNewsletterAdminNotification(contactData).catch((err) =>
-    console.error("Erreur envoi notification admin newsletter :", err.message)
-  );
-
-  return res.status(201).json({
-    ok: true,
-    message: "Votre inscription à la lettre Hadithi a bien été enregistrée.",
-  });
 }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));

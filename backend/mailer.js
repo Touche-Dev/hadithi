@@ -1,15 +1,15 @@
 // mailer.js
 const nodemailer = require("nodemailer");
 
-// Configuration spécifique et propre pour Gmail
+// Configuration du transporteur SMTP pour Gmail
 let transporter = null;
 
 if (process.env.SMTP_USER && process.env.SMTP_PASS) {
   transporter = nodemailer.createTransport({
-    service: "gmail", // ✅ Utilise automatiquement les bons réglages de Google
+    service: "gmail",
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS.replace(/\s+/g, ""), // Mot de passe d'application sans espaces
+      pass: process.env.SMTP_PASS.replace(/\s+/g, ""), // Supprime les espaces éventuels du mot de passe à 16 lettres
     },
     tls: {
       rejectUnauthorized: false,
@@ -48,7 +48,6 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${subject}</title>
   <style>
-    /* Reset styles */
     body, table, td, p, a, li, blockquote { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
     table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
     img { -ms-interpolation-mode: bicubic; border: 0; outline: none; text-decoration: none; }
@@ -84,7 +83,6 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
         <td style="background-color: #FFFFFF; padding: 40px 36px; border-left: 1px solid #E6E0D8; border-right: 1px solid #E6E0D8;" class="content-padding">
           
           ${badgeLabel ? `
-          <!-- Badge discret de contexte -->
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
             <tr>
               <td style="background-color: #FAF6F0; border: 1px solid #E4DACB; border-radius: 20px; padding: 5px 14px; font-size: 12px; color: #6E5D4B; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
@@ -93,12 +91,11 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
             </tr>
           </table>` : ''}
 
-          <!-- Contenu dynamique du message -->
           <div style="font-size: 15px; line-height: 1.7; color: #1E2833;">
             ${contentHtml}
           </div>
 
-          <!-- Signature élégante -->
+          <!-- Signature -->
           <div style="margin-top: 36px; padding-top: 22px; border-top: 1px solid #EFEAE3;">
             <p style="margin: 0; font-size: 15px; color: #05182E; line-height: 1.5;">
               Chaleureusement,<br>
@@ -126,7 +123,6 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
       <tr>
         <td align="center" style="background-color: #ECE5DC; padding: 28px 24px; border-radius: 0 0 4px 4px; border: 1px solid #E0D7CC; border-top: none;">
           
-          <!-- Liens réseaux sociaux -->
           <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
             <tr>
               ${SOCIAL_LINKS.map(
@@ -161,123 +157,34 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
 </html>
 `;
 
-
-/* =====================================================================
- *  4. NOTIFICATIONS NEWSLETTER (CLIENT & ADMINISTRATEUR)
- * ===================================================================== */
-
-/**
- * Email de bienvenue envoyé au lecteur qui s'inscrit
- */
-async function sendNewsletterWelcomeNotification(contact) {
-  if (!contact || !contact.email) return;
-
-  const subject = "Confirmation de votre inscription à la newsletter — Hadithi Publishers";
-
-  const bodyContent = `
-    <p>Bonjour ${contact.name},</p>
-    <p>Nous vous remercions chaleureusement pour votre inscription à la <strong>newsletter de Hadithi Publishers</strong>.</p>
-    
-    <p>Une à deux fois par mois, nous partagerons avec vous :</p>
-    
-    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 22px 0;">
-      <ul style="margin: 0; padding-left: 18px; color: #374151; font-size: 14px; line-height: 1.7;">
-        <li>L'annonce de nos <strong>nouvelles parutions</strong> et rééditions ;</li>
-        <li>Les <strong>coulisses éditoriales</strong> d'un manuscrit, du comité de lecture jusqu'au choix de couverture ;</li>
-        <li>Les dates de nos <strong>rencontres, débats et dédicaces</strong> en marge des sommets et salons.</li>
-      </ul>
-    </div>
-
-    <p>Nous nous attachons à publier des récits exigeants et singuliers. Nous sommes très heureux de vous compter parmi les abonnés à notre newsletter.</p>
-  `;
-
-  const html = emailLayout(
-    subject,
-    bodyContent,
-    `Newsletter : <strong>Hadithi Publishers</strong>`,
-    "Vous recevez cet e-mail suite à votre inscription à la newsletter sur hadithipublishers.com."
-  );
-
-  return sendEmail({
-    toName: contact.name,
-    toEmail: contact.email,
-    subject,
-    html,
-    logType: "Newsletter: Bienvenue Lecteur",
-  });
-}
-
-/**
- * Email de notification envoyé à l'équipe / administrateur
- */
-async function sendNewsletterAdminNotification(contact) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
-  const subject = `[Hadithi] Nouvel abonné à la newsletter : ${contact.name}`;
-
-  const dateNow = new Date().toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  const bodyContent = `
-    <p>Bonjour à l'équipe,</p>
-    <p>Un nouveau lecteur vient de <strong>s'inscrire à la newsletter</strong> depuis le site :</p>
-
-    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
-        <strong>Nom & Prénoms :</strong> ${contact.name}
-      </p>
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
-        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E; text-decoration: underline;">${contact.email}</a>
-      </p>
-      <p style="margin: 0; font-size: 13px; color: #6E5D4B;">
-        <strong>Date & Heure :</strong> ${dateNow}
-      </p>
-    </div>
-
-    <p style="font-size: 13px; color: #7B8591;">L'abonné a été enregistré dans votre base de données avec le tag « newsletter ».</p>
-  `;
-
-  const html = emailLayout(
-    subject,
-    bodyContent,
-    `Newsletter : <strong>Nouvelle inscription</strong>`,
-    "Notification automatique suite à une inscription à la newsletter Hadithi Publishers."
-  );
-
-  return sendEmail({
-    toName: "Équipe Hadithi",
-    toEmail: adminEmail,
-    subject,
-    html,
-    logType: "Newsletter: Notification Admin",
-  });
-}
-
 /**
  * Fonction interne sécurisée d'envoi
  */
 async function sendEmail({ toName, toEmail, subject, html, logType }) {
-  const mailOptions = {
-    from: process.env.SMTP_FROM || "Hadithi Publishers <contact@hadithipublishers.com>",
-    to: `"${toName}" <${toEmail}>`,
-    subject,
-    html,
-  };
-
   if (!transporter) {
     console.log(`\n📨 [SIMULATION EMAIL HADITHI] Vers: ${toEmail} | Sujet: ${subject}`);
     return;
   }
 
+  // Nettoie l'adresse from (retire d'éventuels guillemets superflus du .env)
+  const fromClean = (process.env.SMTP_FROM || process.env.SMTP_USER || "contact@hadithipublishers.com")
+    .replace(/"/g, "")
+    .trim();
+
+  const mailOptions = {
+    from: fromClean.includes("<") ? fromClean : `"Hadithi Publishers" <${fromClean}>`,
+    to: `"${toName}" <${toEmail}>`,
+    subject,
+    html,
+  };
+
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log(`✉️ Email [${logType}] envoyé avec succès à ${toEmail} : ${info.messageId}`);
+    return info;
   } catch (err) {
     console.error(`❌ Échec de l'envoi de l'email [${logType}] à ${toEmail} :`, err.message);
+    throw err;
   }
 }
 
@@ -444,6 +351,102 @@ async function sendAcademyStatusNotification(request, contact) {
   });
 }
 
+/**
+ * Accusé de réception envoyé au candidat qui postule depuis le site
+ */
+async function sendAcademyApplicationNotification(contact, workshop, project) {
+  if (!contact || !contact.email) return;
+
+  const subject = `Candidature reçue : atelier « ${workshop} » — Hadithi Academy`;
+
+  const bodyContent = `
+    <p>Bonjour ${contact.name},</p>
+    <p>Nous accusons bonne réception de votre candidature pour participer à l'atelier d'écriture :</p>
+    
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 20px 0;">
+      <strong style="color: #05182E; font-size: 15px;">${workshop}</strong><br>
+      <p style="margin: 8px 0 0; color: #4B5563; font-size: 14px; font-style: italic;">
+        « ${project} »
+      </p>
+    </div>
+
+    <p>Notre équipe éditoriale examine votre proposition avec soin. Nous reviendrons vers vous très prochainement par email avec le calendrier prévisionnel des prochaines sessions et les détails pratiques.</p>
+    <p>Nous vous remercions pour votre intérêt pour Hadithi Academy.</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Hadithi Academy : <strong>Candidature reçue</strong>`,
+    "Vous recevez cet e-mail suite à votre demande d'inscription sur hadithipublishers.com."
+  );
+
+  return sendEmail({
+    toName: contact.name,
+    toEmail: contact.email,
+    subject,
+    html,
+    logType: "Academy: Accusé Candidature",
+  });
+}
+
+/**
+ * Alerte envoyée à l'administrateur lors d'une candidature Academy
+ */
+async function sendAcademyAdminNotification(contact, workshop, project) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
+  const subject = `[Hadithi Academy] Nouvelle candidature : ${contact.name} (${workshop})`;
+
+  const dateNow = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const bodyContent = `
+    <p>Bonjour à l'équipe,</p>
+    <p>Une nouvelle candidature pour <strong>Hadithi Academy</strong> vient d'être déposée :</p>
+
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Candidat :</strong> ${contact.name}
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E;">${contact.email}</a>
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Atelier visé :</strong> ${workshop}
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Projet :</strong><br>
+        <span style="font-style: italic; color: #374151;">${project}</span>
+      </p>
+      <p style="margin: 0; font-size: 13px; color: #6E5D4B;">
+        <strong>Date & Heure :</strong> ${dateNow}
+      </p>
+    </div>
+
+    <p style="font-size: 13px; color: #7B8591;">Retrouvez et gérez cette demande directement dans l'espace administration.</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Hadithi Academy : <strong>Nouvelle candidature</strong>`,
+    "Notification automatique transmise par le système Hadithi Publishers."
+  );
+
+  return sendEmail({
+    toName: "Équipe Hadithi",
+    toEmail: adminEmail,
+    subject,
+    html,
+    logType: "Academy: Notification Admin",
+  });
+}
+
 /* =====================================================================
  *  3. BIENVENUE AU BOOK CLUB
  * ===================================================================== */
@@ -491,14 +494,20 @@ async function sendBookClubWelcomeNotification(contact, collectionName) {
   });
 }
 
-
-
 /**
  * Alerte envoyée à l'administrateur lors d'une nouvelle inscription au Book Club
  */
 async function sendBookClubAdminNotification(contact, collectionName) {
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
   const subject = `[Hadithi] Nouvel inscrit au Book Club : ${contact.name}`;
+
+  const dateNow = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const bodyContent = `
     <p>Bonjour à l'équipe,</p>
@@ -511,8 +520,11 @@ async function sendBookClubAdminNotification(contact, collectionName) {
       <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
         <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E;">${contact.email}</a>
       </p>
-      <p style="margin: 0; font-size: 14px; color: #05182E;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
         <strong>Collection d'intérêt :</strong> ${collectionName || "Toutes collections"}
+      </p>
+      <p style="margin: 0; font-size: 13px; color: #6E5D4B;">
+        <strong>Date & Heure :</strong> ${dateNow}
       </p>
     </div>
   `;
@@ -533,34 +545,40 @@ async function sendBookClubAdminNotification(contact, collectionName) {
   });
 }
 
+/* =====================================================================
+ *  4. NOTIFICATIONS NEWSLETTER (CLIENT & ADMINISTRATEUR)
+ * ===================================================================== */
+
 /**
- * Accusé de réception envoyé au candidat qui postule à un atelier Academy
+ * Email de bienvenue envoyé au lecteur qui s'inscrit
  */
-async function sendAcademyApplicationNotification(contact, workshop, project) {
+async function sendNewsletterWelcomeNotification(contact) {
   if (!contact || !contact.email) return;
 
-  const subject = `Candidature reçue : atelier « ${workshop} » — Hadithi Academy`;
+  const subject = "Confirmation de votre inscription à la newsletter — Hadithi Publishers";
 
   const bodyContent = `
     <p>Bonjour ${contact.name},</p>
-    <p>Nous accusons bonne réception de votre candidature pour participer à l'atelier d'écriture :</p>
+    <p>Nous vous remercions chaleureusement pour votre inscription à la <strong>newsletter de Hadithi Publishers</strong>.</p>
     
-    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 20px 0;">
-      <strong style="color: #05182E; font-size: 15px;">${workshop}</strong><br>
-      <p style="margin: 8px 0 0; color: #4B5563; font-size: 14px; font-style: italic;">
-        « ${project} »
-      </p>
+    <p>Une à deux fois par mois, nous partagerons avec vous :</p>
+    
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 22px 0;">
+      <ul style="margin: 0; padding-left: 18px; color: #374151; font-size: 14px; line-height: 1.7;">
+        <li>L'annonce de nos <strong>nouvelles parutions</strong> et rééditions ;</li>
+        <li>Les <strong>coulisses éditoriales</strong> d'un manuscrit, du comité de lecture jusqu'au choix de couverture ;</li>
+        <li>Les dates de nos <strong>rencontres, débats et dédicaces</strong> en marge des sommets et salons.</li>
+      </ul>
     </div>
 
-    <p>Notre équipe éditoriale examine votre proposition avec soin. Nous reviendrons vers vous très prochainement par email avec le calendrier prévisionnel des prochaines sessions et les détails pratiques.</p>
-    <p>Nous vous remercions pour votre intérêt pour Hadithi Academy.</p>
+    <p>Nous nous attachons à publier des récits exigeants et singuliers. Nous sommes très heureux de vous compter parmi les abonnés à notre newsletter.</p>
   `;
 
   const html = emailLayout(
     subject,
     bodyContent,
-    `Hadithi Academy : <strong>Candidature reçue</strong>`,
-    "Vous recevez cet e-mail suite à votre demande d'inscription sur hadithipublishers.com."
+    `Newsletter : <strong>Hadithi Publishers</strong>`,
+    "Vous recevez cet e-mail suite à votre inscription à la newsletter sur hadithipublishers.com."
   );
 
   return sendEmail({
@@ -568,45 +586,49 @@ async function sendAcademyApplicationNotification(contact, workshop, project) {
     toEmail: contact.email,
     subject,
     html,
-    logType: "Academy: Accusé Candidature",
+    logType: "Newsletter: Bienvenue Lecteur",
   });
 }
 
 /**
- * Alerte envoyée à l'administrateur lors d'une candidature Academy
+ * Email de notification envoyé à l'équipe / administrateur
  */
-async function sendAcademyAdminNotification(contact, workshop, project) {
+async function sendNewsletterAdminNotification(contact) {
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
-  const subject = `[Hadithi Academy] Nouvelle candidature : ${contact.name} (${workshop})`;
+  const subject = `[Hadithi] Nouvel abonné à la newsletter : ${contact.name}`;
+
+  const dateNow = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const bodyContent = `
     <p>Bonjour à l'équipe,</p>
-    <p>Une nouvelle candidature pour <strong>Hadithi Academy</strong> vient d'être déposée :</p>
+    <p>Un nouveau lecteur vient de <strong>s'inscrire à la newsletter</strong> depuis le site :</p>
 
     <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
       <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
-        <strong>Candidat :</strong> ${contact.name}
+        <strong>Nom & Prénoms :</strong> ${contact.name}
       </p>
       <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
-        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E;">${contact.email}</a>
+        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E; text-decoration: underline;">${contact.email}</a>
       </p>
-      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
-        <strong>Atelier visé :</strong> ${workshop}
-      </p>
-      <p style="margin: 0; font-size: 14px; color: #05182E;">
-        <strong>Projet :</strong><br>
-        <span style="font-style: italic; color: #374151;">${project}</span>
+      <p style="margin: 0; font-size: 13px; color: #6E5D4B;">
+        <strong>Date & Heure :</strong> ${dateNow}
       </p>
     </div>
 
-    <p style="font-size: 13px; color: #7B8591;">Retrouvez et gérez cette demande directement dans l'espace administration.</p>
+    <p style="font-size: 13px; color: #7B8591;">L'abonné a été enregistré dans votre base de données avec le tag « newsletter ».</p>
   `;
 
   const html = emailLayout(
     subject,
     bodyContent,
-    `Hadithi Academy : <strong>Nouvelle candidature</strong>`,
-    "Notification automatique transmise par le système Hadithi Publishers."
+    `Newsletter : <strong>Nouvelle inscription</strong>`,
+    "Notification automatique suite à une inscription à la newsletter Hadithi Publishers."
   );
 
   return sendEmail({
@@ -614,7 +636,7 @@ async function sendAcademyAdminNotification(contact, workshop, project) {
     toEmail: adminEmail,
     subject,
     html,
-    logType: "Academy: Notification Admin",
+    logType: "Newsletter: Notification Admin",
   });
 }
 
@@ -622,9 +644,9 @@ module.exports = {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
   sendBookClubWelcomeNotification,
+  sendBookClubAdminNotification,
+  sendAcademyApplicationNotification,
+  sendAcademyAdminNotification,
   sendNewsletterWelcomeNotification,
   sendNewsletterAdminNotification,
-  sendBookClubAdminNotification,        // <-- Nouveau
-  sendAcademyApplicationNotification,   // <-- Nouveau
-  sendAcademyAdminNotification,          // <-- Nouveau
 };
