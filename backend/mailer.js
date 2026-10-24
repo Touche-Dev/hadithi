@@ -4,31 +4,39 @@ const nodemailer = require("nodemailer");
 // Configuration du transporteur SMTP
 let transporter = null;
 
-if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 465,
-    secure: Number(process.env.SMTP_PORT) === 465, // true pour le port 465, false pour 587
-    pool: true,              // ✅ RÉUTILISE la connexion au lieu d'en ouvrir 50 à la fois
-    maxConnections: 1,       // ✅ 1 seule connexion simultanée pour ne pas être bloqué par l'hébergeur
-    maxMessages: 100,        // Nombre max d'emails par connexion
-    rateDelta: 1000,         // Intervalle minimum entre chaque envoi (1 seconde)
-    rateLimit: 2,            // Pas plus de 2 emails par seconde
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false, // Évite les blocages de certificats SSL chez certains hébergeurs
-    },
-  });
+if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+  // Si c'est Gmail, on utilise la configuration native 'gmail' (la plus stable)
+  const isGmail = (process.env.SMTP_HOST || "").includes("gmail") || (process.env.SMTP_USER || "").endsWith("@gmail.com");
 
-  // Vérification de la connexion au démarrage du serveur
+  const transportConfig = isGmail
+    ? {
+      service: "gmail",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS.replace(/\s+/g, ""), // Supprime les espaces éventuels du mot de passe à 16 lettres
+      },
+    }
+    : {
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 465,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    };
+
+  transporter = nodemailer.createTransport(transportConfig);
+
+  // Vérification de la connexion au démarrage
   transporter.verify((error) => {
     if (error) {
       console.error("❌ Erreur de configuration SMTP :", error.message);
     } else {
-      console.log("✅ Serveur SMTP prêt à envoyer des e-mails.");
+      console.log("✅ Serveur SMTP Gmail prêt à envoyer des e-mails !");
     }
   });
 }
