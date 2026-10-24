@@ -152,6 +152,102 @@ const emailLayout = (subject, contentHtml, badgeLabel = null, footerContext = nu
 </html>
 `;
 
+
+/* =====================================================================
+ *  4. NOTIFICATIONS NEWSLETTER (CLIENT & ADMINISTRATEUR)
+ * ===================================================================== */
+
+/**
+ * Email de bienvenue envoyé au lecteur qui s'inscrit
+ */
+async function sendNewsletterWelcomeNotification(contact) {
+  if (!contact || !contact.email) return;
+
+  const subject = "Bienvenue dans le cercle de nos lecteurs — Hadithi Publishers";
+
+  const bodyContent = `
+    <p>Bonjour ${contact.name},</p>
+    <p>Nous vous remercions chaleureusement pour votre inscription à la lettre d'information de <strong>Hadithi Publishers</strong>.</p>
+    
+    <p>Une à deux fois par mois, nous partagerons avec vous :</p>
+    
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 14px 18px; margin: 22px 0;">
+      <ul style="margin: 0; padding-left: 18px; color: #374151; font-size: 14px; line-height: 1.7;">
+        <li>L'annonce de nos <strong>nouvelles parutions</strong> et rééditions ;</li>
+        <li>Les <strong>coulisses éditoriales</strong> d'un manuscrit, du comité de lecture jusqu'au choix de couverture ;</li>
+        <li>Les dates de nos <strong>rencontres, débats et dédicaces</strong> en marge des sommets et salons.</li>
+      </ul>
+    </div>
+
+    <p>Nous nous attachons à publier des récits exigeants et singuliers. Nous sommes très heureux de vous compter parmi nos lecteurs attentifs.</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Lettre d'information : <strong>Hadithi</strong>`,
+    "Vous recevez cet e-mail car vous vous êtes inscrit à la lettre d'information sur hadithipublishers.com."
+  );
+
+  return sendEmail({
+    toName: contact.name,
+    toEmail: contact.email,
+    subject,
+    html,
+    logType: "Newsletter: Bienvenue Lecteur",
+  });
+}
+
+/**
+ * Email de notification envoyé à l'équipe / administrateur
+ */
+async function sendNewsletterAdminNotification(contact) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "abnegko@gmail.com";
+  const subject = `[Hadithi] Nouvel abonné à la newsletter : ${contact.name}`;
+
+  const dateNow = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const bodyContent = `
+    <p>Bonjour à l'équipe,</p>
+    <p>Un nouveau lecteur vient de s'inscrire à la lettre d'information depuis le site :</p>
+
+    <div style="background-color: #FAF7F2; border-left: 3px solid #05182E; padding: 16px 20px; margin: 20px 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Nom & Prénoms :</strong> ${contact.name}
+      </p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #05182E;">
+        <strong>Email :</strong> <a href="mailto:${contact.email}" style="color: #05182E; text-decoration: underline;">${contact.email}</a>
+      </p>
+      <p style="margin: 0; font-size: 13px; color: #6E5D4B;">
+        <strong>Date & Heure :</strong> ${dateNow}
+      </p>
+    </div>
+
+    <p style="font-size: 13px; color: #7B8591;">Le contact a été automatiquement enregistré dans votre base de données avec le tag « newsletter ».</p>
+  `;
+
+  const html = emailLayout(
+    subject,
+    bodyContent,
+    `Administration : <strong>Nouveau contact</strong>`,
+    "Notification automatique transmise par le système Hadithi Publishers."
+  );
+
+  return sendEmail({
+    toName: "Équipe Hadithi",
+    toEmail: adminEmail,
+    subject,
+    html,
+    logType: "Newsletter: Notification Admin",
+  });
+}
+
 /**
  * Fonction interne sécurisée d'envoi
  */
@@ -391,4 +487,6 @@ module.exports = {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
   sendBookClubWelcomeNotification,
+  sendNewsletterWelcomeNotification,
+  sendNewsletterAdminNotification,
 };

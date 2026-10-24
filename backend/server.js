@@ -12,7 +12,9 @@ require("dotenv").config();
 const {
   sendManuscriptStatusNotification,
   sendAcademyStatusNotification,
-  sendBookClubWelcomeNotification
+  sendBookClubWelcomeNotification,
+  sendNewsletterWelcomeNotification, // <-- Ajouté
+  sendNewsletterAdminNotification,   // <-- Ajouté
 } = require("./mailer");
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -1252,7 +1254,7 @@ app.delete("/api/admin/events/:id", requireAuth, adminWrite(async (req, res) => 
 
 
 
-// POST /api/newsletter → Inscription à la newsletter avec vérification de doublon
+// POST /api/newsletter → Inscription à la newsletter
 app.post("/api/newsletter", route(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || "").trim();
@@ -1265,7 +1267,7 @@ app.post("/api/newsletter", route(async (req, res) => {
     return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
   }
 
-  // 1. Vérification préalable des doublons
+  // 1. Vérification des doublons
   const [existing] = await db.query(
     "SELECT id, tags, unsubscribed FROM contacts WHERE email = ?",
     [email]
@@ -1275,14 +1277,12 @@ app.post("/api/newsletter", route(async (req, res) => {
     const contact = existing[0];
     const tags = parseJson(contact.tags, []);
 
-    // Si déjà inscrit et non désabonné -> DOUBLON
     if (tags.includes("newsletter") && !contact.unsubscribed) {
       return res.status(409).json({
         error: "Cette adresse email est déjà inscrite à notre lettre d'information.",
       });
     }
 
-    // Si le contact existait (autre motif ou ancien désinscrit), on le réabonne
     const updatedTags = Array.from(new Set([...tags, "newsletter"]));
     await db.query(
       `UPDATE contacts 
@@ -1291,13 +1291,23 @@ app.post("/api/newsletter", route(async (req, res) => {
       [name, JSON.stringify(updatedTags), contact.id]
     );
   } else {
-    // 2. Nouveau contact
     await db.query(
       `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
        VALUES (?, ?, ?, NOW(), 0)`,
       [name, email, JSON.stringify(["newsletter"])]
     );
   }
+
+  // 2. ENVOI DES NOTIFICATIONS (Lecteur & Administrateur)
+  const contactData = { name, email };
+
+  sendNewsletterWelcomeNotification(contactData).catch((err) =>
+    console.error("Erreur envoi email bienvenue newsletter :", err.message)
+  );
+
+  sendNewsletterAdminNotification(contactData).catch((err) =>
+    console.error("Erreur envoi notification admin newsletter :", err.message)
+  );
 
   return res.status(201).json({
     ok: true,
