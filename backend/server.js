@@ -1252,7 +1252,7 @@ app.delete("/api/admin/events/:id", requireAuth, adminWrite(async (req, res) => 
 
 
 
-// POST /api/newsletter → Inscription à la newsletter depuis la page d'accueil
+// POST /api/newsletter → Inscription à la newsletter avec vérification de doublon
 app.post("/api/newsletter", route(async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || "").trim();
@@ -1265,31 +1265,44 @@ app.post("/api/newsletter", route(async (req, res) => {
     return res.status(400).json({ error: "Une adresse email valide est obligatoire." });
   }
 
-  await withTransaction(async (conn) => {
-    const [existing] = await conn.query("SELECT id, tags FROM contacts WHERE email = ?", [email]);
+  // 1. Vérification préalable des doublons
+  const [existing] = await db.query(
+    "SELECT id, tags, unsubscribed FROM contacts WHERE email = ?",
+    [email]
+  );
 
-    if (existing[0]) {
-      const currentTags = parseJson(existing[0].tags, []);
-      if (!currentTags.includes("newsletter")) {
-        currentTags.push("newsletter");
-      }
+  if (existing[0]) {
+    const contact = existing[0];
+    const tags = parseJson(contact.tags, []);
 
-      await conn.query(
-        `UPDATE contacts 
-         SET name = ?, tags = ?, unsubscribed = 0, consent_at = COALESCE(consent_at, NOW()) 
-         WHERE id = ?`,
-        [name, JSON.stringify(currentTags), existing[0].id]
-      );
-    } else {
-      await conn.query(
-        `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
-         VALUES (?, ?, ?, NOW(), 0)`,
-        [name, email, JSON.stringify(["newsletter"])]
-      );
+    // Si déjà inscrit et non désabonné -> DOUBLON
+    if (tags.includes("newsletter") && !contact.unsubscribed) {
+      return res.status(409).json({
+        error: "Cette adresse email est déjà inscrite à notre lettre d'information.",
+      });
     }
-  });
 
-  res.status(201).json({ ok: true, message: "Merci ! Votre inscription à la newsletter a bien été prise en compte." });
+    // Si le contact existait (autre motif ou ancien désinscrit), on le réabonne
+    const updatedTags = Array.from(new Set([...tags, "newsletter"]));
+    await db.query(
+      `UPDATE contacts 
+       SET name = ?, tags = ?, unsubscribed = 0, consent_at = COALESCE(consent_at, NOW()) 
+       WHERE id = ?`,
+      [name, JSON.stringify(updatedTags), contact.id]
+    );
+  } else {
+    // 2. Nouveau contact
+    await db.query(
+      `INSERT INTO contacts (name, email, tags, consent_at, unsubscribed) 
+       VALUES (?, ?, ?, NOW(), 0)`,
+      [name, email, JSON.stringify(["newsletter"])]
+    );
+  }
+
+  return res.status(201).json({
+    ok: true,
+    message: "Votre inscription à la lettre Hadithi a bien été enregistrée.",
+  });
 }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
